@@ -74,7 +74,6 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
-    // URL WEB APP GOOGLE APPS SCRIPT ANDA
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7IZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzvTUQ0lr4kGu0XeBLZFQ/exec";
 
     let html5QrCode = null;
@@ -94,7 +93,7 @@
       }
     }
 
-    // SUARA BEEP SUKSES (NADA TINGGI)
+    // SUARA BEEP SUKSES
     function playBeepSuccess() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -110,7 +109,7 @@
       } catch (e) {}
     }
 
-    // SUARA BUZZER ALARM (NADA RENDAH KASAR DUA KALI)
+    // SUARA BUZZER ALARM PERINGATAN KERAS
     function playBuzzerDuplicate() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -183,6 +182,8 @@
     function onScanSuccess(decodedText) {
       const scannedNik = decodedText.trim().toUpperCase();
       const modul = document.getElementById("targetModul").value;
+      const sesi = document.getElementById("sesiMakan").value;
+      const paket = document.getElementById("paketAmenities").value;
 
       if (html5QrCode && html5QrCode.isScanning) {
         html5QrCode.pause();
@@ -195,62 +196,61 @@
         didOpen: () => Swal.showLoading()
       });
 
-      let payload = { action: modul, nik: scannedNik };
+      // Menggunakan query string GET agar bebas masalah CORS dan redirect browser
+      const requestUrl = `${GAS_WEB_APP_URL}?action=${encodeURIComponent(modul)}&nik=${encodeURIComponent(scannedNik)}&sesi=${encodeURIComponent(sesi)}&itemPaket=${encodeURIComponent(paket)}&qty=1`;
 
-      if (modul === 'catering') {
-        payload.sesi = document.getElementById("sesiMakan").value;
-      } else {
-        payload.itemPaket = document.getElementById("paketAmenities").value;
-        payload.qty = 1;
-      }
-
-      // Kirim tanpa preflight CORS agar response JSON terbaca
-      fetch(GAS_WEB_APP_URL, {
-        method: "POST",
-        body: JSON.stringify(payload)
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          playBeepSuccess();
-          Swal.fire({
-            icon: 'success',
-            title: 'BERHASIL DIAMBIL',
-            html: `<h5>${data.nama}</h5><p class="text-muted">${data.message}</p>`,
-            timer: 1800,
-            showConfirmButton: false
-          }).then(() => {
-            if (html5QrCode) html5QrCode.resume();
-          });
-        } else if (data.status === 'warning') {
-          // BUNYIKAN ALARM BUZZER JIKA SUDAH PERNAH AMBIL
-          playBuzzerDuplicate();
+      fetch(requestUrl)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            playBeepSuccess();
+            Swal.fire({
+              icon: 'success',
+              title: 'BERHASIL DIAMBIL',
+              html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
+                     <p class="text-muted mb-0">${data.message}</p>`,
+              timer: 1900,
+              showConfirmButton: false
+            }).then(() => {
+              if (html5QrCode) html5QrCode.resume();
+            });
+          } else if (data.status === 'warning' || data.duplicate) {
+            // JIKA TERDETEKSI DUPLIKAT (SUDAH PERNAH AMBIL)
+            playBuzzerDuplicate();
+            Swal.fire({
+              icon: 'error',
+              title: 'DITOLAK: SUDAH AMBIL MAKAN!',
+              html: `<div class="py-2">
+                       <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
+                       <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
+                       <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
+                     </div>`,
+              confirmButtonColor: '#ef4444',
+              confirmButtonText: 'Tutup / Lanjutkan Scan'
+            }).then(() => {
+              if (html5QrCode) html5QrCode.resume();
+            });
+          } else {
+            Swal.fire({
+              icon: 'warning',
+              title: 'Peringatan',
+              text: data.message || 'Terjadi kesalahan sistem',
+              confirmButtonColor: '#0f172a'
+            }).then(() => {
+              if (html5QrCode) html5QrCode.resume();
+            });
+          }
+        })
+        .catch(err => {
           Swal.fire({
             icon: 'error',
-            title: 'DITOLAK: SUDAH AMBIL!',
-            html: `<h4 class="text-danger fw-bold">${data.nama}</h4>
-                   <p class="mb-1">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
-                   <span class="badge bg-danger fs-6 p-2">Tercatat Pukul: ${data.waktu}</span>`,
-            confirmButtonColor: '#ef4444',
-            confirmButtonText: 'Tutup'
+            title: 'Koneksi Gagal',
+            text: 'Gagal menghubungi server Google Apps Script: ' + err.message,
+            confirmButtonColor: '#0f172a'
           }).then(() => {
             if (html5QrCode) html5QrCode.resume();
           });
-        }
-      })
-      .catch(err => {
-        // Fallback jika mode strict redirect
-        playBeepSuccess();
-        Swal.fire({
-          icon: 'info',
-          title: 'Terkirim ke Server',
-          text: `NIK: ${scannedNik}`,
-          timer: 1500,
-          showConfirmButton: false
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
         });
-      });
     }
   </script>
 </body>
