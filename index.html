@@ -74,6 +74,7 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
+    // URL Web App Google Apps Script Anda
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7IZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzvTUQ0lr4kGu0XeBLZFQ/exec";
 
     let html5QrCode = null;
@@ -93,7 +94,6 @@
       }
     }
 
-    // SUARA BEEP SUKSES
     function playBeepSuccess() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -109,7 +109,6 @@
       } catch (e) {}
     }
 
-    // SUARA BUZZER ALARM PERINGATAN KERAS
     function playBuzzerDuplicate() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -196,7 +195,7 @@
         didOpen: () => Swal.showLoading()
       });
 
-      // Menggunakan query string GET agar bebas masalah CORS dan redirect browser
+      // Menggunakan query string GET agar bebas masalah CORS browser dan langsung membaca data JSON
       const requestUrl = `${GAS_WEB_APP_URL}?action=${encodeURIComponent(modul)}&nik=${encodeURIComponent(scannedNik)}&sesi=${encodeURIComponent(sesi)}&itemPaket=${encodeURIComponent(paket)}&qty=1`;
 
       fetch(requestUrl)
@@ -215,7 +214,7 @@
               if (html5QrCode) html5QrCode.resume();
             });
           } else if (data.status === 'warning' || data.duplicate) {
-            // JIKA TERDETEKSI DUPLIKAT (SUDAH PERNAH AMBIL)
+            // TERDETEKSI DUPLIKAT: BUNYIKAN ALARM BUZZER & TAMPILKAN POPUP MERAH
             playBuzzerDuplicate();
             Swal.fire({
               icon: 'error',
