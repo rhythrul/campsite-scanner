@@ -195,61 +195,97 @@
         didOpen: () => Swal.showLoading()
       });
 
-      // Menggunakan query string GET agar bebas masalah CORS browser dan langsung membaca data JSON
-      const requestUrl = `${GAS_WEB_APP_URL}?action=${encodeURIComponent(modul)}&nik=${encodeURIComponent(scannedNik)}&sesi=${encodeURIComponent(sesi)}&itemPaket=${encodeURIComponent(paket)}&qty=1`;
+      // METODE JSONP (BEBAS CORS & BEBAS GAGAL FETCH)
+      const callbackName = 'gasCallback_' + Date.now();
+      
+      const timeoutTimer = setTimeout(() => {
+        cleanup();
+        Swal.fire({
+          icon: 'error',
+          title: 'Waktu Habis (Timeout)',
+          text: 'Server tidak merespons dalam 10 detik. Pastikan koneksi stabil dan izin akses Apps Script disetel ke "Anyone".',
+          confirmButtonColor: '#0f172a'
+        }).then(() => {
+          if (html5QrCode) html5QrCode.resume();
+        });
+      }, 10000);
 
-      fetch(requestUrl)
-        .then(res => res.json())
-        .then(data => {
-          if (data.status === 'success') {
-            playBeepSuccess();
-            Swal.fire({
-              icon: 'success',
-              title: 'BERHASIL DIAMBIL',
-              html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
-                     <p class="text-muted mb-0">${data.message}</p>`,
-              timer: 1900,
-              showConfirmButton: false
-            }).then(() => {
-              if (html5QrCode) html5QrCode.resume();
-            });
-          } else if (data.status === 'warning' || data.duplicate) {
-            // TERDETEKSI DUPLIKAT: BUNYIKAN ALARM BUZZER & TAMPILKAN POPUP MERAH
-            playBuzzerDuplicate();
-            Swal.fire({
-              icon: 'error',
-              title: 'DITOLAK: SUDAH AMBIL MAKAN!',
-              html: `<div class="py-2">
-                       <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
-                       <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
-                       <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
-                     </div>`,
-              confirmButtonColor: '#ef4444',
-              confirmButtonText: 'Tutup / Lanjutkan Scan'
-            }).then(() => {
-              if (html5QrCode) html5QrCode.resume();
-            });
-          } else {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Peringatan',
-              text: data.message || 'Terjadi kesalahan sistem',
-              confirmButtonColor: '#0f172a'
-            }).then(() => {
-              if (html5QrCode) html5QrCode.resume();
-            });
-          }
-        })
-        .catch(err => {
+      function cleanup() {
+        clearTimeout(timeoutTimer);
+        delete window[callbackName];
+        const oldScript = document.getElementById(callbackName);
+        if (oldScript) oldScript.remove();
+      }
+
+      // Handler Respon dari Google Sheets
+      window[callbackName] = function(data) {
+        cleanup();
+        if (data.status === 'success') {
+          playBeepSuccess();
+          Swal.fire({
+            icon: 'success',
+            title: 'BERHASIL DIAMBIL',
+            html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
+                   <p class="text-muted mb-0">${data.message}</p>`,
+            timer: 2000,
+            showConfirmButton: false
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        } else if (data.status === 'warning' || data.duplicate) {
+          // BUNYIKAN ALARM BUZZER & POPUP PENOLAKAN
+          playBuzzerDuplicate();
           Swal.fire({
             icon: 'error',
-            title: 'Koneksi Gagal',
-            text: 'Gagal menghubungi server Google Apps Script: ' + err.message,
+            title: 'DITOLAK: SUDAH AMBIL MAKAN!',
+            html: `<div class="py-2">
+                     <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
+                     <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
+                     <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
+                   </div>`,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Tutup / Lanjutkan Scan'
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        } else {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Peringatan',
+            text: data.message || 'Terjadi kesalahan sistem',
             confirmButtonColor: '#0f172a'
           }).then(() => {
             if (html5QrCode) html5QrCode.resume();
           });
+        }
+      };
+
+      // Siapkan Parameter Request
+      const params = new URLSearchParams({
+        action: modul,
+        nik: scannedNik,
+        sesi: sesi,
+        itemPaket: paket,
+        qty: '1',
+        callback: callbackName
+      });
+
+      // Buat elemen script dinamis
+      const scriptEl = document.createElement('script');
+      scriptEl.id = callbackName;
+      scriptEl.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
+      scriptEl.onerror = function() {
+        cleanup();
+        Swal.fire({
+          icon: 'error',
+          title: 'Koneksi Ditolak',
+          text: 'Gagal terhubung ke Google Apps Script. Pastikan akses deployment Web App diatur ke "Anyone" (Siapa saja).',
+          confirmButtonColor: '#0f172a'
+        }).then(() => {
+          if (html5QrCode) html5QrCode.resume();
         });
+      };
+      document.body.appendChild(scriptEl);
     }
   </script>
 </body>
