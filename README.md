@@ -1,0 +1,2 @@
+# campsite-scanner
+campsite-scanner
