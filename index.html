@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Camp Site - External Scanner Portal</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- SweetAlert2 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .scanner-card { background: #1e293b; border: none; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+    #qr-reader { width: 100%; border-radius: 12px; overflow: hidden; border: 2px solid #334155; }
+  </style>
+</head>
+<body>
+
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="card scanner-card p-4">
+          <div class="text-center mb-4">
+            <i class="bi bi-qr-code-scan text-warning display-4"></i>
+            <h4 class="fw-bold mt-2">Camp Site Scanner</h4>
+            <p class="text-muted small">Pindai ID Card Karyawan untuk Makan & Amenities</p>
+          </div>
+
+          <!-- Konfigurasi Modul & Sesi -->
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-secondary">Pilih Jenis Transaksi</label>
+            <select class="form-select bg-dark text-white border-secondary" id="targetModul" onchange="toggleModulOptions()">
+              <option value="catering">1. Pembagian Makan (Catering)</option>
+              <option value="amenities">2. Pembagian Amenities</option>
+            </select>
+          </div>
+
+          <!-- Opsi Tambahan untuk Catering -->
+          <div class="mb-3" id="cateringOptions">
+            <label class="form-label small fw-bold text-secondary">Sesi Waktu Makan</label>
+            <select class="form-select bg-dark text-white border-secondary" id="sesiMakan">
+              <option value="Pagi">Makan Pagi (Breakfast)</option>
+              <option value="Siang">Makan Siang (Lunch)</option>
+              <option value="Sore">Makan Sore (Dinner)</option>
+              <option value="Tengah Malam">Makan Tengah Malam (Supper)</option>
+            </select>
+          </div>
+
+          <!-- Opsi Tambahan untuk Amenities -->
+          <div class="mb-3 d-none" id="amenitiesOptions">
+            <label class="form-label small fw-bold text-secondary">Paket Amenities</label>
+            <select class="form-select bg-dark text-white border-secondary" id="paketAmenities">
+              <option value="Paket Lengkap Bulanan (Sabun Mandi, Cuci, Kopi, Gula)">Paket Lengkap Bulanan</option>
+              <option value="Paket Toiletries (Sabun Mandi & Cuci)">Paket Toiletries</option>
+              <option value="Paket Pantry (Kopi & Gula)">Paket Pantry</option>
+            </select>
+          </div>
+
+          <!-- Kamera Reader -->
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-secondary">Pilih Kamera Perangkat</label>
+            <select id="cameraSelect" class="form-select form-select-sm bg-dark text-white border-secondary mb-2" onchange="changeCamera()"></select>
+            <div id="qr-reader"></div>
+          </div>
+
+          <div id="scanStatus" class="text-center small text-info fw-semibold mb-2">Menyiapkan kamera...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Pendukung -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <script>
+    // ** TEMPEL URL WEB APP GOOGLE APPS SCRIPT ANDA DI SINI **
+    const GAS_WEB_APP_URL = "URL_WEB_APP_ANDA_DISINI";
+
+    let html5QrCode = null;
+    let activeCameraId = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initScanner();
+    });
+
+    function toggleModulOptions() {
+      const val = document.getElementById("targetModul").value;
+      if (val === "catering") {
+        document.getElementById("cateringOptions").classList.remove("d-none");
+        document.getElementById("amenitiesOptions").classList.add("d-none");
+      } else {
+        document.getElementById("cateringOptions").classList.add("d-none");
+        document.getElementById("amenitiesOptions").classList.remove("d-none");
+      }
+    }
+
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.12);
+      } catch (e) {}
+    }
+
+    function initScanner() {
+      Html5Qrcode.getCameras().then(devices => {
+        const selectEl = document.getElementById("cameraSelect");
+        selectEl.innerHTML = "";
+        if (devices && devices.length > 0) {
+          devices.forEach((dev, idx) => {
+            const opt = document.createElement("option");
+            opt.value = dev.id;
+            opt.text = dev.label || `Kamera ${idx + 1}`;
+            selectEl.appendChild(opt);
+          });
+          activeCameraId = devices[0].id;
+          startCamera(activeCameraId);
+        } else {
+          document.getElementById("scanStatus").innerText = "Tidak ada kamera ditemukan di perangkat ini.";
+        }
+      }).catch(err => {
+        document.getElementById("scanStatus").innerHTML = `<span class="text-danger">Akses kamera diblokir sistem/browser.</span>`;
+      });
+    }
+
+    function startCamera(cameraId) {
+      if (html5QrCode) {
+        html5QrCode.clear();
+      }
+      html5QrCode = new Html5Qrcode("qr-reader");
+      html5QrCode.start(
+        cameraId,
+        { fps: 15, qrbox: { width: 220, height: 220 } },
+        onScanSuccess,
+        err => {}
+      ).then(() => {
+        document.getElementById("scanStatus").innerText = "Kamera aktif. Silakan arahkan QR Code ID Card.";
+      }).catch(err => {
+        document.getElementById("scanStatus").innerText = "Gagal memulai video stream kamera.";
+      });
+    }
+
+    function changeCamera() {
+      const selectedId = document.getElementById("cameraSelect").value;
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => {
+          startCamera(selectedId);
+        });
+      } else {
+        startCamera(selectedId);
+      }
+    }
+
+    function onScanSuccess(decodedText) {
+      playBeep();
+      const scannedNik = decodedText.trim().toUpperCase();
+      const modul = document.getElementById("targetModul").value;
+
+      // Jeda scanner sementara agar tidak scan beruntun
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.pause();
+      }
+
+      Swal.fire({
+        title: 'Memproses...',
+        text: `Mengirim NIK: ${scannedNik} ke server`,
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+      });
+
+      let payload = { action: modul, nik: scannedNik, nama: "Karyawan (Auto)", departemen: "General Affair" };
+
+      if (modul === 'catering') {
+        payload.sesi = document.getElementById("sesiMakan").value;
+      } else {
+        payload.itemPaket = document.getElementById("paketAmenities").value;
+        payload.qty = 1;
+      }
+
+      // Kirim via fetch POST ke Google Apps Script Web App
+      fetch(GAS_WEB_APP_URL, {
+        method: "POST",
+        mode: "no-cors", // Diperlukan untuk lintas domain GAS
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      .then(() => {
+        Swal.fire({
+          icon: 'success',
+          title: 'Berhasil Tercatat!',
+          text: `NIK ${scannedNik} berhasil diproses.`,
+          timer: 1800,
+          showConfirmButton: false
+        }).then(() => {
+          if (html5QrCode) html5QrCode.resume();
+        });
+      })
+      .catch(err => {
+        Swal.fire({
+          icon: 'error',
+          title: 'Gagal Mengirim',
+          text: err.toString()
+        }).then(() => {
+          if (html5QrCode) html5QrCode.resume();
+        });
+      });
+    }
+  </script>
+</body>
+</html>
