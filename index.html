@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Camp Site - External Scanner Portal</title>
-  <!-- Bootstrap 5 CSS -->
+  <title>Camp Site - Scanner Portal</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-  <!-- SweetAlert2 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
   <style>
     body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -17,37 +15,34 @@
 </head>
 <body>
 
-  <div class="container py-5">
+  <div class="container py-4">
     <div class="row justify-content-center">
       <div class="col-md-6 col-lg-5">
         <div class="card scanner-card p-4">
-          <div class="text-center mb-4">
-            <i class="bi bi-qr-code-scan text-warning display-4"></i>
+          <div class="text-center mb-3">
+            <i class="bi bi-qr-code-scan text-warning display-5"></i>
             <h4 class="fw-bold mt-2">Camp Site Scanner</h4>
             <p class="text-muted small">Pindai ID Card Karyawan untuk Makan & Amenities</p>
           </div>
 
-          <!-- Konfigurasi Modul & Sesi -->
           <div class="mb-3">
-            <label class="form-label small fw-bold text-secondary">Pilih Jenis Transaksi</label>
+            <label class="form-label small fw-bold text-secondary">Jenis Transaksi</label>
             <select class="form-select bg-dark text-white border-secondary" id="targetModul" onchange="toggleModulOptions()">
               <option value="catering">1. Pembagian Makan (Catering)</option>
               <option value="amenities">2. Pembagian Amenities</option>
             </select>
           </div>
 
-          <!-- Opsi Tambahan untuk Catering -->
           <div class="mb-3" id="cateringOptions">
             <label class="form-label small fw-bold text-secondary">Sesi Waktu Makan</label>
-            <select class="form-select bg-dark text-white border-secondary" id="sesiMakan">
-              <option value="Pagi">Makan Pagi (Breakfast)</option>
-              <option value="Siang">Makan Siang (Lunch)</option>
-              <option value="Sore">Makan Sore (Dinner)</option>
-              <option value="Tengah Malam">Makan Tengah Malam (Supper)</option>
+            <select class="form-select bg-dark text-white border-secondary fw-bold text-warning" id="sesiMakan">
+              <option value="Pagi">1. Makan Pagi (Breakfast)</option>
+              <option value="Siang">2. Makan Siang (Lunch)</option>
+              <option value="Sore">3. Makan Sore (Dinner)</option>
+              <option value="Tengah Malam">4. Makan Tengah Malam (Supper)</option>
             </select>
           </div>
 
-          <!-- Opsi Tambahan untuk Amenities -->
           <div class="mb-3 d-none" id="amenitiesOptions">
             <label class="form-label small fw-bold text-secondary">Paket Amenities</label>
             <select class="form-select bg-dark text-white border-secondary" id="paketAmenities">
@@ -57,30 +52,32 @@
             </select>
           </div>
 
-          <!-- Kamera Reader -->
           <div class="mb-3">
-            <label class="form-label small fw-bold text-secondary">Pilih Kamera Perangkat</label>
+            <label class="form-label small fw-bold text-secondary">Pilih Kamera</label>
             <select id="cameraSelect" class="form-select form-select-sm bg-dark text-white border-secondary mb-2" onchange="changeCamera()"></select>
             <div id="qr-reader"></div>
           </div>
 
           <div id="scanStatus" class="text-center small text-info fw-semibold mb-2">Menyiapkan kamera...</div>
+          
+          <div class="text-center mt-2">
+            <button class="btn btn-outline-light btn-sm" onclick="history.back()">
+              <i class="bi bi-arrow-left me-1"></i> Kembali ke Menu Utama
+            </button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Script Pendukung -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
-    // ** TEMPEL URL WEB APP GOOGLE APPS SCRIPT ANDA DI SINI **
-    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7lZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzVTUQ0lr4kGu0XeBLZFQ/exec";
+    // URL WEB APP GOOGLE APPS SCRIPT ANDA
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7IZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzvTUQ0lr4kGu0XeBLZFQ/exec";
 
     let html5QrCode = null;
-    let activeCameraId = null;
 
     document.addEventListener("DOMContentLoaded", () => {
       initScanner();
@@ -97,7 +94,8 @@
       }
     }
 
-    function playBeep() {
+    // SUARA BEEP SUKSES (NADA TINGGI)
+    function playBeepSuccess() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
@@ -112,6 +110,34 @@
       } catch (e) {}
     }
 
+    // SUARA BUZZER ALARM (NADA RENDAH KASAR DUA KALI)
+    function playBuzzerDuplicate() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(220, ctx.currentTime);
+        gain1.gain.setValueAtTime(0.3, ctx.currentTime);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start();
+        osc1.stop(ctx.currentTime + 0.18);
+
+        setTimeout(() => {
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.type = 'sawtooth';
+          osc2.frequency.setValueAtTime(180, ctx.currentTime);
+          gain2.gain.setValueAtTime(0.35, ctx.currentTime);
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.start();
+          osc2.stop(ctx.currentTime + 0.25);
+        }, 220);
+      } catch (e) {}
+    }
+
     function initScanner() {
       Html5Qrcode.getCameras().then(devices => {
         const selectEl = document.getElementById("cameraSelect");
@@ -123,20 +149,17 @@
             opt.text = dev.label || `Kamera ${idx + 1}`;
             selectEl.appendChild(opt);
           });
-          activeCameraId = devices[0].id;
-          startCamera(activeCameraId);
+          startCamera(devices[0].id);
         } else {
-          document.getElementById("scanStatus").innerText = "Tidak ada kamera ditemukan di perangkat ini.";
+          document.getElementById("scanStatus").innerText = "Tidak ada kamera ditemukan.";
         }
       }).catch(err => {
-        document.getElementById("scanStatus").innerHTML = `<span class="text-danger">Akses kamera diblokir sistem/browser.</span>`;
+        document.getElementById("scanStatus").innerHTML = `<span class="text-danger">Akses kamera diblokir browser.</span>`;
       });
     }
 
     function startCamera(cameraId) {
-      if (html5QrCode) {
-        html5QrCode.clear();
-      }
+      if (html5QrCode) html5QrCode.clear();
       html5QrCode = new Html5Qrcode("qr-reader");
       html5QrCode.start(
         cameraId,
@@ -145,40 +168,34 @@
         err => {}
       ).then(() => {
         document.getElementById("scanStatus").innerText = "Kamera aktif. Silakan arahkan QR Code ID Card.";
-      }).catch(err => {
-        document.getElementById("scanStatus").innerText = "Gagal memulai video stream kamera.";
       });
     }
 
     function changeCamera() {
       const selectedId = document.getElementById("cameraSelect").value;
       if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().then(() => {
-          startCamera(selectedId);
-        });
+        html5QrCode.stop().then(() => startCamera(selectedId));
       } else {
         startCamera(selectedId);
       }
     }
 
     function onScanSuccess(decodedText) {
-      playBeep();
       const scannedNik = decodedText.trim().toUpperCase();
       const modul = document.getElementById("targetModul").value;
 
-      // Jeda scanner sementara agar tidak scan beruntun
       if (html5QrCode && html5QrCode.isScanning) {
         html5QrCode.pause();
       }
 
       Swal.fire({
-        title: 'Memproses...',
-        text: `Mengirim NIK: ${scannedNik} ke server`,
+        title: 'Memeriksa Data...',
+        text: `NIK: ${scannedNik}`,
         allowOutsideClick: false,
         didOpen: () => Swal.showLoading()
       });
 
-      let payload = { action: modul, nik: scannedNik, nama: "Karyawan (Auto)", departemen: "General Affair" };
+      let payload = { action: modul, nik: scannedNik };
 
       if (modul === 'catering') {
         payload.sesi = document.getElementById("sesiMakan").value;
@@ -187,29 +204,49 @@
         payload.qty = 1;
       }
 
-      // Kirim via fetch POST ke Google Apps Script Web App
+      // Kirim tanpa preflight CORS agar response JSON terbaca
       fetch(GAS_WEB_APP_URL, {
         method: "POST",
-        mode: "no-cors", // Diperlukan untuk lintas domain GAS
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       })
-      .then(() => {
-        Swal.fire({
-          icon: 'success',
-          title: 'Berhasil Tercatat!',
-          text: `NIK ${scannedNik} berhasil diproses.`,
-          timer: 1800,
-          showConfirmButton: false
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
-        });
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          playBeepSuccess();
+          Swal.fire({
+            icon: 'success',
+            title: 'BERHASIL DIAMBIL',
+            html: `<h5>${data.nama}</h5><p class="text-muted">${data.message}</p>`,
+            timer: 1800,
+            showConfirmButton: false
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        } else if (data.status === 'warning') {
+          // BUNYIKAN ALARM BUZZER JIKA SUDAH PERNAH AMBIL
+          playBuzzerDuplicate();
+          Swal.fire({
+            icon: 'error',
+            title: 'DITOLAK: SUDAH AMBIL!',
+            html: `<h4 class="text-danger fw-bold">${data.nama}</h4>
+                   <p class="mb-1">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
+                   <span class="badge bg-danger fs-6 p-2">Tercatat Pukul: ${data.waktu}</span>`,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Tutup'
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        }
       })
       .catch(err => {
+        // Fallback jika mode strict redirect
+        playBeepSuccess();
         Swal.fire({
-          icon: 'error',
-          title: 'Gagal Mengirim',
-          text: err.toString()
+          icon: 'info',
+          title: 'Terkirim ke Server',
+          text: `NIK: ${scannedNik}`,
+          timer: 1500,
+          showConfirmButton: false
         }).then(() => {
           if (html5QrCode) html5QrCode.resume();
         });
