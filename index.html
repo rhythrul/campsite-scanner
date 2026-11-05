@@ -194,111 +194,94 @@
         didOpen: () => Swal.showLoading()
       });
 
-      // 1. COBA MENGGUNAKAN JALUR FETCH GET TERLEBIH DAHULU
-      const requestUrl = `${GAS_WEB_APP_URL}?action=${encodeURIComponent(modul)}&nik=${encodeURIComponent(scannedNik)}&sesi=${encodeURIComponent(sesi)}&itemPaket=${encodeURIComponent(paket)}&qty=1&t=${Date.now()}`;
-
-      fetch(requestUrl, {
-        method: "GET",
-        mode: "cors",
-        redirect: "follow"
-      })
-      .then(res => {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .then(data => {
-        handleServerResponse(data, scannedNik);
-      })
-      .catch(fetchErr => {
-        // 2. JIKA FETCH DIBLOKIR CORS OLEH BROWSER, BERALIH KE JSONP SECARA OTOMATIS
-        sendViaJsonp(modul, scannedNik, sesi, paket, fetchErr);
-      });
-    }
-
-    function sendViaJsonp(modul, scannedNik, sesi, paket, prevErr) {
-      const callbackName = 'gasCb_' + Date.now();
+      // MENGGUNAKAN JSONP (DYNAMIC SCRIPT) BEBAS CORS
+      const callbackName = 'gasCallback_' + Date.now();
+      
       const timeoutTimer = setTimeout(() => {
         cleanup();
         Swal.fire({
           icon: 'error',
-          title: 'Koneksi Gagal',
-          html: `<p class="mb-1">Gagal terhubung ke Google Apps Script.</p>
-                 <small class="text-danger">Pastikan izin deployment diatur ke: <strong>Who has access: Anyone</strong>.</small>`,
+          title: 'Waktu Habis (Timeout)',
+          text: 'Server Apps Script tidak merespons. Pastikan sudah dideploy ke "Versi Baru".',
           confirmButtonColor: '#0f172a'
         }).then(() => {
           if (html5QrCode) html5QrCode.resume();
         });
-      }, 8000);
+      }, 10000);
 
       function cleanup() {
         clearTimeout(timeoutTimer);
         delete window[callbackName];
-        const el = document.getElementById(callbackName);
-        if (el) el.remove();
+        const oldScript = document.getElementById(callbackName);
+        if (oldScript) oldScript.remove();
       }
 
       window[callbackName] = function(data) {
         cleanup();
-        handleServerResponse(data, scannedNik);
+        if (data.status === 'success') {
+          playBeepSuccess();
+          Swal.fire({
+            icon: 'success',
+            title: 'BERHASIL DIAMBIL',
+            html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
+                   <p class="text-muted mb-0">${data.message}</p>`,
+            timer: 2000,
+            showConfirmButton: false
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        } else if (data.status === 'warning' || data.duplicate) {
+          playBuzzerDuplicate();
+          Swal.fire({
+            icon: 'error',
+            title: 'DITOLAK: SUDAH AMBIL MAKAN!',
+            html: `<div class="py-2">
+                     <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
+                     <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
+                     <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
+                   </div>`,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Tutup / Lanjutkan Scan'
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        } else {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Peringatan',
+            text: data.message || 'Terjadi kesalahan sistem',
+            confirmButtonColor: '#0f172a'
+          }).then(() => {
+            if (html5QrCode) html5QrCode.resume();
+          });
+        }
       };
+
+      const params = new URLSearchParams({
+        action: modul,
+        nik: scannedNik,
+        sesi: sesi,
+        itemPaket: paket,
+        qty: '1',
+        callback: callbackName
+      });
 
       const scriptEl = document.createElement('script');
       scriptEl.id = callbackName;
-      scriptEl.src = `${GAS_WEB_APP_URL}?action=${encodeURIComponent(modul)}&nik=${encodeURIComponent(scannedNik)}&sesi=${encodeURIComponent(sesi)}&itemPaket=${encodeURIComponent(paket)}&qty=1&callback=${callbackName}&t=${Date.now()}`;
+      scriptEl.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
       scriptEl.onerror = function() {
         cleanup();
         Swal.fire({
           icon: 'error',
           title: 'Akses Ditolak Server',
           html: `<p class="small mb-1">Server Google Apps Script menolak permintaan.</p>
-                 <small class="text-danger">Pastikan setelan: <strong>Who has access: Anyone</strong>.</small>`,
+                 <small class="text-danger">Pastikan Anda memilih <strong>Versi Baru</strong> saat deploy!</small>`,
           confirmButtonColor: '#0f172a'
         }).then(() => {
           if (html5QrCode) html5QrCode.resume();
         });
       };
       document.body.appendChild(scriptEl);
-    }
-
-    function handleServerResponse(data, scannedNik) {
-      if (data.status === 'success') {
-        playBeepSuccess();
-        Swal.fire({
-          icon: 'success',
-          title: 'BERHASIL DIAMBIL',
-          html: `<h4 class="text-primary fw-bold mb-1">${data.nama}</h4>
-                 <p class="text-muted small mb-0">${data.message}</p>`,
-          timer: 2000,
-          showConfirmButton: false
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
-        });
-      } else if (data.status === 'warning' || data.duplicate) {
-        // DETEKSI DUPLIKAT: ALARM BUZZER & POPUP MERAH
-        playBuzzerDuplicate();
-        Swal.fire({
-          icon: 'error',
-          title: 'DITOLAK: SUDAH AMBIL MAKAN!',
-          html: `<div class="py-2">
-                   <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
-                   <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
-                   <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
-                 </div>`,
-          confirmButtonColor: '#ef4444',
-          confirmButtonText: 'Tutup / Lanjutkan Scan'
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
-        });
-      } else {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Peringatan',
-          text: data.message || 'Terjadi kesalahan sistem',
-          confirmButtonColor: '#0f172a'
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
-        });
-      }
     }
   </script>
 </body>
