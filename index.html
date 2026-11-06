@@ -59,9 +59,15 @@
           </div>
 
           <div id="scanStatus" class="text-center small text-info fw-semibold mb-2">Menyiapkan kamera...</div>
+
+          <!-- Input Manual / Alat Tes Koneksi Cepat -->
+          <div class="input-group input-group-sm mt-3">
+            <input type="text" id="manualNikInput" class="form-control bg-dark text-white border-secondary" placeholder="Ketik NIK manual (Contoh: EMP-001)">
+            <button class="btn btn-warning fw-bold" type="button" onclick="triggerManualScan()">Kirim Manual</button>
+          </div>
           
-          <div class="text-center mt-2">
-            <button class="btn btn-outline-light btn-sm" onclick="history.back()">
+          <div class="text-center mt-3">
+            <button class="btn btn-outline-light btn-sm w-100" onclick="history.back()">
               <i class="bi bi-arrow-left me-1"></i> Kembali ke Menu Utama
             </button>
           </div>
@@ -74,9 +80,11 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
+    // Pastikan URL ini sesuai dengan URL Aplikasi Web pada menu Kelola Deployment Anda
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7IZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzvTUQ0lr4kGu0XeBLZFQ/exec";
 
     let html5QrCode = null;
+    let isProcessing = false;
 
     document.addEventListener("DOMContentLoaded", () => {
       initScanner();
@@ -151,7 +159,7 @@
           document.getElementById("scanStatus").innerText = "Tidak ada kamera ditemukan.";
         }
       }).catch(err => {
-        document.getElementById("scanStatus").innerHTML = `<span class="text-danger">Akses kamera diblokir browser.</span>`;
+        document.getElementById("scanStatus").innerHTML = `<span class="text-danger">Akses kamera diblokir browser. Gunakan input manual di bawah.</span>`;
       });
     }
 
@@ -177,14 +185,24 @@
       }
     }
 
-    function onScanSuccess(decodedText) {
+    function triggerManualScan() {
+      const val = document.getElementById("manualNikInput").value.trim();
+      if (!val) return;
+      onScanSuccess(val);
+      document.getElementById("manualNikInput").value = "";
+    }
+
+    async function onScanSuccess(decodedText) {
+      if (isProcessing) return;
+      isProcessing = true;
+
       const scannedNik = decodedText.replace(/[\r\n\t]/g, '').trim().toUpperCase();
       const modul = document.getElementById("targetModul").value;
       const sesi = document.getElementById("sesiMakan").value;
       const paket = document.getElementById("paketAmenities").value;
 
       if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.pause();
+        try { html5QrCode.pause(); } catch (e) {}
       }
 
       Swal.fire({
@@ -194,94 +212,106 @@
         didOpen: () => Swal.showLoading()
       });
 
-      // MENGGUNAKAN JSONP (DYNAMIC SCRIPT) BEBAS CORS
-      const callbackName = 'gasCallback_' + Date.now();
-      
-      const timeoutTimer = setTimeout(() => {
-        cleanup();
-        Swal.fire({
-          icon: 'error',
-          title: 'Waktu Habis (Timeout)',
-          text: 'Server Apps Script tidak merespons. Pastikan sudah dideploy ke "Versi Baru".',
-          confirmButtonColor: '#0f172a'
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
-        });
-      }, 10000);
-
-      function cleanup() {
-        clearTimeout(timeoutTimer);
-        delete window[callbackName];
-        const oldScript = document.getElementById(callbackName);
-        if (oldScript) oldScript.remove();
-      }
-
-      window[callbackName] = function(data) {
-        cleanup();
-        if (data.status === 'success') {
-          playBeepSuccess();
-          Swal.fire({
-            icon: 'success',
-            title: 'BERHASIL DIAMBIL',
-            html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
-                   <p class="text-muted mb-0">${data.message}</p>`,
-            timer: 2000,
-            showConfirmButton: false
-          }).then(() => {
-            if (html5QrCode) html5QrCode.resume();
-          });
-        } else if (data.status === 'warning' || data.duplicate) {
-          playBuzzerDuplicate();
-          Swal.fire({
-            icon: 'error',
-            title: 'DITOLAK: SUDAH AMBIL MAKAN!',
-            html: `<div class="py-2">
-                     <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
-                     <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
-                     <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
-                   </div>`,
-            confirmButtonColor: '#ef4444',
-            confirmButtonText: 'Tutup / Lanjutkan Scan'
-          }).then(() => {
-            if (html5QrCode) html5QrCode.resume();
-          });
-        } else {
-          Swal.fire({
-            icon: 'warning',
-            title: 'Peringatan',
-            text: data.message || 'Terjadi kesalahan sistem',
-            confirmButtonColor: '#0f172a'
-          }).then(() => {
-            if (html5QrCode) html5QrCode.resume();
-          });
-        }
-      };
-
-      const params = new URLSearchParams({
+      const payload = {
         action: modul,
         nik: scannedNik,
         sesi: sesi,
         itemPaket: paket,
-        qty: '1',
-        callback: callbackName
-      });
+        qty: 1
+      };
 
-      const scriptEl = document.createElement('script');
-      scriptEl.id = callbackName;
-      scriptEl.src = `${GAS_WEB_APP_URL}?${params.toString()}`;
-      scriptEl.onerror = function() {
-        cleanup();
+      try {
+        // KUNCI UTAMA: credentials: 'omit' mencegah konflik multi-akun Google Drive!
+        const response = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          mode: 'cors',
+          credentials: 'omit',
+          redirect: 'follow',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const rawText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (jsonErr) {
+          throw new Error("Respon server bukan JSON. Pastikan akses Web App disetel ke 'Siapa saja'.");
+        }
+
+        handleResponseData(data);
+      } catch (postErr) {
+        // Fallback ke metode GET dengan credentials: 'omit' jika POST terhalang jaringan
+        try {
+          const query = new URLSearchParams({
+            action: modul,
+            nik: scannedNik,
+            sesi: sesi,
+            itemPaket: paket,
+            qty: '1',
+            t: Date.now()
+          });
+          const getRes = await fetch(`${GAS_WEB_APP_URL}?${query.toString()}`, {
+            method: 'GET',
+            mode: 'cors',
+            credentials: 'omit',
+            redirect: 'follow'
+          });
+          const data = await getRes.json();
+          handleResponseData(data);
+        } catch (getErr) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Gagal Terhubung ke Server',
+            html: `<p class="small mb-1">${getErr.message}</p>
+                   <small class="text-danger">Pastikan URL Web App di kode ini sama persis dengan URL di Kelola Deployment!</small>`,
+            confirmButtonColor: '#0f172a'
+          }).then(() => resumeScanner());
+        }
+      }
+    }
+
+    function handleResponseData(data) {
+      if (data.status === 'success') {
+        playBeepSuccess();
+        Swal.fire({
+          icon: 'success',
+          title: 'BERHASIL DIAMBIL',
+          html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
+                 <p class="text-muted mb-0">${data.message}</p>`,
+          timer: 2000,
+          showConfirmButton: false
+        }).then(() => resumeScanner());
+      } else if (data.status === 'warning' || data.duplicate) {
+        playBuzzerDuplicate();
         Swal.fire({
           icon: 'error',
-          title: 'Akses Ditolak Server',
-          html: `<p class="small mb-1">Server Google Apps Script menolak permintaan.</p>
-                 <small class="text-danger">Pastikan Anda memilih <strong>Versi Baru</strong> saat deploy!</small>`,
+          title: 'DITOLAK: SUDAH AMBIL MAKAN!',
+          html: `<div class="py-2">
+                   <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
+                   <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
+                   <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
+                 </div>`,
+          confirmButtonColor: '#ef4444',
+          confirmButtonText: 'Tutup / Lanjutkan Scan'
+        }).then(() => resumeScanner());
+      } else {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Peringatan',
+          text: data.message || 'Terjadi kesalahan sistem',
           confirmButtonColor: '#0f172a'
-        }).then(() => {
-          if (html5QrCode) html5QrCode.resume();
-        });
-      };
-      document.body.appendChild(scriptEl);
+        }).then(() => resumeScanner());
+      }
+    }
+
+    function resumeScanner() {
+      isProcessing = false;
+      if (html5QrCode) {
+        try { html5QrCode.resume(); } catch (e) {}
+      }
     }
   </script>
 </body>
