@@ -60,7 +60,6 @@
 
           <div id="scanStatus" class="text-center small text-info fw-semibold mb-2">Menyiapkan kamera...</div>
 
-          <!-- Input Manual / Alat Tes Koneksi Cepat -->
           <div class="input-group input-group-sm mt-3">
             <input type="text" id="manualNikInput" class="form-control bg-dark text-white border-secondary" placeholder="Ketik NIK manual (Contoh: EMP-001)">
             <button class="btn btn-warning fw-bold" type="button" onclick="triggerManualScan()">Kirim Manual</button>
@@ -80,8 +79,7 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <script>
-    // Pastikan URL ini sesuai dengan URL Aplikasi Web pada menu Kelola Deployment Anda
-    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7lZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzVTUQ0lr4kGu0XeBLZFQ/exec";
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzELR_ih6qBuJmX7IZfcOdd9PMrsJr7jCDWOUExit56sA_ZUxzvTUQ0lr4kGu0XeBLZFQ/exec";
 
     let html5QrCode = null;
     let isProcessing = false;
@@ -221,7 +219,6 @@
       };
 
       try {
-        // KUNCI UTAMA: credentials: 'omit' mencegah konflik multi-akun Google Drive!
         const response = await fetch(GAS_WEB_APP_URL, {
           method: 'POST',
           mode: 'cors',
@@ -234,16 +231,9 @@
         });
 
         const rawText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(rawText);
-        } catch (jsonErr) {
-          throw new Error("Respon server bukan JSON. Pastikan akses Web App disetel ke 'Siapa saja'.");
-        }
-
+        let data = JSON.parse(rawText);
         handleResponseData(data);
       } catch (postErr) {
-        // Fallback ke metode GET dengan credentials: 'omit' jika POST terhalang jaringan
         try {
           const query = new URLSearchParams({
             action: modul,
@@ -279,8 +269,12 @@
         Swal.fire({
           icon: 'success',
           title: 'BERHASIL DIAMBIL',
-          html: `<h4 class="text-primary fw-bold">${data.nama}</h4>
-                 <p class="text-muted mb-0">${data.message}</p>`,
+          html: `<h4 class="text-primary fw-bold mb-1">${data.nama}</h4>
+                 <div class="mb-2">
+                   <span class="badge bg-dark me-1"><i class="bi bi-door-open me-1"></i>${data.kamar || '-'}</span>
+                   <span class="badge bg-secondary">${data.nik}</span>
+                 </div>
+                 <p class="text-muted small mb-0">${data.message}</p>`,
           timer: 2000,
           showConfirmButton: false
         }).then(() => resumeScanner());
@@ -290,7 +284,11 @@
           icon: 'error',
           title: 'DITOLAK: SUDAH AMBIL MAKAN!',
           html: `<div class="py-2">
-                   <h3 class="text-danger fw-bold mb-2">${data.nama}</h3>
+                   <h3 class="text-danger fw-bold mb-1">${data.nama}</h3>
+                   <div class="mb-2">
+                     <span class="badge bg-dark me-1"><i class="bi bi-door-open me-1"></i>${data.kamar || '-'}</span>
+                     <span class="badge bg-secondary">${data.nik}</span>
+                   </div>
                    <p class="mb-1 text-dark">Sudah mengambil makan <strong>${data.sesi}</strong> hari ini.</p>
                    <span class="badge bg-danger fs-6 p-2 mt-2">Tercatat Pukul: ${data.waktu}</span>
                  </div>`,
